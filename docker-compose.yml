@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    container_name: kenya-ai-postgres
+    environment:
+      POSTGRES_USER: kenya_user
+      POSTGRES_PASSWORD: kenya_secure_pass_2024
+      POSTGRES_DB: kenya_ai_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kenya_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: kenya-ai-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Disaster Prediction API
+  disaster-api:
+    build:
+      context: ./disaster-prediction
+      dockerfile: Dockerfile
+    container_name: kenya-disaster-api
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql://kenya_user:kenya_secure_pass_2024@postgres:5432/kenya_ai_db
+      REDIS_URL: redis://redis:6379
+      ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./disaster-prediction:/app
+
+  # Smart City Twin API
+  smart-city-api:
+    build:
+      context: ./smart-city-twin
+      dockerfile: Dockerfile
+    container_name: kenya-smart-city-api
+    ports:
+      - "8002:8000"
+    environment:
+      DATABASE_URL: postgresql://kenya_user:kenya_secure_pass_2024@postgres:5432/kenya_ai_db
+      REDIS_URL: redis://redis:6379
+      ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./smart-city-twin:/app
+
+  # Road Damage Detection API
+  road-damage-api:
+    build:
+      context: ./road-damage-detection
+      dockerfile: Dockerfile
+    container_name: kenya-road-damage-api
+    ports:
+      - "8003:8000"
+    environment:
+      DATABASE_URL: postgresql://kenya_user:kenya_secure_pass_2024@postgres:5432/kenya_ai_db
+      REDIS_URL: redis://redis:6379
+      ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./road-damage-detection:/app
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Crop Disease Detection API
+  crop-disease-api:
+    build:
+      context: ./crop-disease-detection
+      dockerfile: Dockerfile
+    container_name: kenya-crop-disease-api
+    ports:
+      - "8004:8000"
+    environment:
+      DATABASE_URL: postgresql://kenya_user:kenya_secure_pass_2024@postgres:5432/kenya_ai_db
+      REDIS_URL: redis://redis:6379
+      ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./crop-disease-detection:/app
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kenya-ai-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_DISASTER: http://localhost:8001
+      REACT_APP_API_SMART_CITY: http://localhost:8002
+      REACT_APP_API_ROAD_DAMAGE: http://localhost:8003
+      REACT_APP_API_CROP_DISEASE: http://localhost:8004
+    depends_on:
+      - disaster-api
+      - smart-city-api
+      - road-damage-api
+      - crop-disease-api
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: kenya-ai-network
